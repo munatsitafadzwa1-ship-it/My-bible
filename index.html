@@ -197,6 +197,15 @@
     background:var(--surface-2);color:var(--text);font-size:15px;margin-bottom:12px;
   }
   ::placeholder{color:var(--text-dim);}
+
+  /* ---------- Notes ---------- */
+  textarea.notes-input{
+    width:100%;min-height:110px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);
+    background:var(--surface-2);color:var(--text);font-size:15px;font-family:var(--sans);
+    resize:vertical;line-height:1.5;
+  }
+  textarea.notes-input:focus{outline:none;border-color:var(--gold-dim);}
+  .notes-status{font-size:11px;color:var(--text-dim);text-align:right;margin-top:6px;min-height:14px;}
 </style>
 </head>
 <body>
@@ -227,6 +236,12 @@
       <div class="eyebrow">Today's Word on Finances</div>
       <div class="day-title" id="financeRef" style="font-size:18px;color:var(--gold);margin-bottom:8px;"></div>
       <p class="verse" id="financeText" style="font-size:16px;margin:0;"></p>
+    </div>
+
+    <div class="card" id="notesCard">
+      <div class="eyebrow">My Notes — <span id="notesDayLabel">Day 1</span></div>
+      <textarea class="notes-input" id="notesInput" placeholder="Jot down what stood out to you today…"></textarea>
+      <div class="notes-status" id="notesStatus">&nbsp;</div>
     </div>
 
     <div class="streak">
@@ -395,7 +410,8 @@ const BIBLE_DATA = {"bookNames":["Genesis","Exodus","Leviticus","Numbers","Deute
     currentDay: store.get('currentDay', 0),
     readDays: store.get('readDays', {}),
     fontSize: store.get('fontSize', 'medium'),
-    lastBook: store.get('lastBook', 0)
+    lastBook: store.get('lastBook', 0),
+    notes: store.get('notes', {})
   };
 
   function save(){
@@ -403,6 +419,7 @@ const BIBLE_DATA = {"bookNames":["Genesis","Exodus","Leviticus","Numbers","Deute
     store.set('readDays', state.readDays);
     store.set('fontSize', state.fontSize);
     store.set('lastBook', state.lastBook);
+    store.set('notes', state.notes);
   }
 
   // ---------- helpers ----------
@@ -485,7 +502,27 @@ const BIBLE_DATA = {"bookNames":["Genesis","Exodus","Leviticus","Numbers","Deute
     document.getElementById('statPercent').textContent = Math.round(countCompleted()/TOTAL_DAYS*100)+'%';
 
     renderYearGrid(document.getElementById('yearGrid'), day, true);
+
+    document.getElementById('notesDayLabel').textContent = `Day ${day+1}`;
+    const notesEl = document.getElementById('notesInput');
+    notesEl.value = state.notes[day] || '';
+    document.getElementById('notesStatus').innerHTML = '&nbsp;';
   }
+
+  // ---------- notes ----------
+  let notesSaveTimer = null;
+  document.getElementById('notesInput').addEventListener('input', (e)=>{
+    const day = state.currentDay;
+    const val = e.target.value;
+    const statusEl = document.getElementById('notesStatus');
+    statusEl.textContent = 'Saving…';
+    clearTimeout(notesSaveTimer);
+    notesSaveTimer = setTimeout(()=>{
+      if(val.trim()===''){ delete state.notes[day]; } else { state.notes[day] = val; }
+      save();
+      statusEl.textContent = 'Saved';
+    }, 500);
+  });
 
   function renderYearGrid(container, currentDay, compact){
     container.innerHTML='';
