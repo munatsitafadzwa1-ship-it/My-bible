@@ -160,6 +160,35 @@
   .fs-large .verse{font-size:20px;}
   .fs-small .chapter-block h2{font-size:18px;}
   .fs-large .chapter-block h2{font-size:23px;}
+  .verse.speaking{background:var(--surface-2);border-radius:8px;box-shadow:-3px 0 0 var(--gold) inset;padding-left:8px;margin-left:-8px;}
+
+  /* ---------- Audio reader ---------- */
+  .audio-bar{
+    position:fixed;left:0;right:0;bottom:64px;z-index:25;
+    max-width:640px;margin:0 auto;
+    background:rgba(27,29,40,0.97);backdrop-filter:blur(8px);
+    border:1px solid var(--line);border-radius:14px;
+    padding:8px 10px;display:none;align-items:center;gap:8px;
+  }
+  .audio-bar.active{display:flex;}
+  .audio-bar .audio-info{flex:1;min-width:0;}
+  .audio-bar .audio-ref{font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .audio-bar input[type=range]{width:100%;accent-color:var(--gold);height:16px;}
+  .audio-panel{
+    position:fixed;left:0;right:0;bottom:120px;z-index:26;
+    max-width:640px;margin:0 auto;
+    background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:14px 16px;display:none;
+  }
+  .audio-panel.active{display:block;}
+  .audio-panel label{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin:10px 0 4px;}
+  .audio-panel label:first-child{margin-top:0;}
+  .audio-panel select{
+    width:100%;padding:9px 10px;border-radius:9px;border:1px solid var(--line);
+    background:var(--surface-2);color:var(--text);font-size:14px;
+  }
+  .audio-panel input[type=range]{width:100%;accent-color:var(--gold);}
+  .audio-panel .speedval{font-size:12px;color:var(--text-dim);text-align:right;}
 
   /* ---------- Browse ---------- */
   .booklist{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
@@ -301,6 +330,24 @@
     </div>
   </div>
 
+</div>
+
+<div class="audio-panel" id="audioPanel">
+  <label for="audioVoiceSelect">Voice</label>
+  <select id="audioVoiceSelect"></select>
+  <label for="audioSpeed">Speed <span class="speedval" id="audioSpeedVal">1.0×</span></label>
+  <input type="range" id="audioSpeed" min="0.6" max="1.6" step="0.1" value="1">
+</div>
+
+<div class="audio-bar" id="audioBar">
+  <button class="iconbtn" id="audioPrev" title="Previous verse">⏮</button>
+  <button class="iconbtn primary" id="audioPlayPause" title="Play/Pause">▶</button>
+  <button class="iconbtn" id="audioNext" title="Next verse">⏭</button>
+  <div class="audio-info">
+    <div class="audio-ref" id="audioRef">—</div>
+  </div>
+  <button class="iconbtn" id="audioSettingsBtn" title="Voice & speed">⚙</button>
+  <button class="iconbtn" id="audioClose" title="Stop">✕</button>
 </div>
 
 <div class="tabbar">
@@ -556,23 +603,26 @@ const BIBLE_DATA = {"bookNames":["Genesis","Exodus","Leviticus","Numbers","Deute
     let html = `<div class="reader-head">
         <button class="iconbtn" id="btnCloseReading">‹</button>
         <div class="title">Day ${dayIdx+1} · ${refLabel(entries).join(', ')}</div>
+        <button class="iconbtn" id="btnListen" title="Listen">🔊</button>
       </div>`;
     entries.forEach(e=>{
       const verses = D.bible[e.b][e.c-1];
       html += `<div class="chapter-block"><h2>${D.bookNames[e.b]} ${e.c}</h2>`;
       verses.forEach((v,i)=>{
-        html += `<p class="verse"><span class="vnum">${i+1}</span>${v}</p>`;
+        html += `<p class="verse"><span class="vnum">${i+1}</span><span class="vtext">${v}</span></p>`;
       });
       html += `</div>`;
     });
     html += `<button class="btn primary block" id="btnMarkFromReading">${state.readDays[dayIdx] ? '✓ Marked as Read' : 'Mark Day as Read'}</button>`;
     wrap.innerHTML = html;
-    document.getElementById('btnCloseReading').addEventListener('click', ()=>{ showView('today'); renderToday(); });
+    document.getElementById('btnCloseReading').addEventListener('click', ()=>{ AudioReader.stop(); showView('today'); renderToday(); });
     document.getElementById('btnMarkFromReading').addEventListener('click', (ev)=>{
       state.readDays[dayIdx] = !state.readDays[dayIdx];
       save();
       ev.target.textContent = state.readDays[dayIdx] ? '✓ Marked as Read' : 'Mark Day as Read';
     });
+    document.getElementById('btnListen').addEventListener('click', ()=>AudioReader.toggle());
+    AudioReader.stop();
     showView('reading');
   }
 
@@ -584,18 +634,21 @@ const BIBLE_DATA = {"bookNames":["Genesis","Exodus","Leviticus","Numbers","Deute
     let html = `<div class="reader-head">
         <button class="iconbtn" id="btnCloseReading">‹</button>
         <div class="title">${D.bookNames[bookIdx]} ${chapter}</div>
+        <button class="iconbtn" id="btnListen" title="Listen">🔊</button>
       </div>
       <div class="chapter-block">`;
-    verses.forEach((v,i)=>{ html += `<p class="verse"><span class="vnum">${i+1}</span>${v}</p>`; });
+    verses.forEach((v,i)=>{ html += `<p class="verse"><span class="vnum">${i+1}</span><span class="vtext">${v}</span></p>`; });
     html += `</div>
       <div class="row" style="gap:10px;">
         <button class="btn block" id="btnPrevCh" ${chapter<=1?'disabled':''}>‹ Previous</button>
         <button class="btn block" id="btnNextCh" ${chapter>=numChapters?'disabled':''}>Next ›</button>
       </div>`;
     wrap.innerHTML = html;
-    document.getElementById('btnCloseReading').addEventListener('click', ()=>{ showView('chapters'); });
-    if(chapter>1) document.getElementById('btnPrevCh').addEventListener('click', ()=>openReadingFreeform(bookIdx, chapter-1));
-    if(chapter<numChapters) document.getElementById('btnNextCh').addEventListener('click', ()=>openReadingFreeform(bookIdx, chapter+1));
+    document.getElementById('btnCloseReading').addEventListener('click', ()=>{ AudioReader.stop(); showView('chapters'); });
+    document.getElementById('btnListen').addEventListener('click', ()=>AudioReader.toggle());
+    if(chapter>1) document.getElementById('btnPrevCh').addEventListener('click', ()=>{ AudioReader.stop(); openReadingFreeform(bookIdx, chapter-1); });
+    if(chapter<numChapters) document.getElementById('btnNextCh').addEventListener('click', ()=>{ AudioReader.stop(); openReadingFreeform(bookIdx, chapter+1); });
+    AudioReader.stop();
     showView('reading');
   }
 
@@ -646,6 +699,157 @@ const BIBLE_DATA = {"bookNames":["Genesis","Exodus","Leviticus","Numbers","Deute
       showView('today');
     }
   });
+
+  // ---------- audio reader (text-to-speech) ----------
+  const AudioReader = (function(){
+    const supported = 'speechSynthesis' in window;
+    const bar = document.getElementById('audioBar');
+    const panel = document.getElementById('audioPanel');
+    const refEl = document.getElementById('audioRef');
+    const playBtn = document.getElementById('audioPlayPause');
+    const voiceSelect = document.getElementById('audioVoiceSelect');
+    const speedInput = document.getElementById('audioSpeed');
+    const speedVal = document.getElementById('audioSpeedVal');
+
+    let queue = [];
+    let idx = -1;
+    let playing = false;
+    let voices = [];
+    let voice = null;
+    let rate = store.get('ttsRate', 1);
+    let voiceURI = store.get('ttsVoiceURI', null);
+    speedInput.value = rate;
+    speedVal.textContent = rate.toFixed(1)+'×';
+
+    const maleHints = /\b(male|david|mark|guy|daniel|alex|fred|aaron|arthur|oliver|thomas|james|george|ryan|paul|rishi|eric|brian|kyle|justin|gordon)\b/i;
+    const femaleHints = /\b(female|samantha|victoria|karen|moira|susan|zira|tessa|fiona|kate|serena|allison|ava|zoe|emma|joanna|salli|kimberly|amy|hazel|catherine)\b/i;
+
+    function loadVoices(){
+      if(!supported) return;
+      voices = window.speechSynthesis.getVoices() || [];
+      const en = voices.filter(v=>/^en/i.test(v.lang));
+      const pool = en.length ? en : voices;
+      voiceSelect.innerHTML = '';
+      pool.forEach(v=>{
+        const opt = document.createElement('option');
+        opt.value = v.voiceURI;
+        opt.textContent = v.name + (v.lang ? ' ('+v.lang+')' : '');
+        voiceSelect.appendChild(opt);
+      });
+      let pick = null;
+      if(voiceURI) pick = pool.find(v=>v.voiceURI===voiceURI);
+      if(!pick) pick = pool.find(v=>maleHints.test(v.name) && !femaleHints.test(v.name));
+      if(!pick) pick = pool.find(v=>!femaleHints.test(v.name));
+      voice = pick || pool[0] || voices[0] || null;
+      if(voice) voiceSelect.value = voice.voiceURI;
+    }
+    if(supported){
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    function buildQueue(){
+      queue = [];
+      document.querySelectorAll('#readingContent .chapter-block').forEach(block=>{
+        const h2 = block.querySelector('h2');
+        const heading = h2 ? h2.textContent : '';
+        block.querySelectorAll('.verse').forEach(el=>{
+          const vnumEl = el.querySelector('.vnum');
+          const vtextEl = el.querySelector('.vtext');
+          if(!vtextEl) return;
+          queue.push({
+            el,
+            text: vtextEl.textContent,
+            ref: heading + (vnumEl ? (':'+vnumEl.textContent) : '')
+          });
+        });
+      });
+    }
+
+    function clearHighlight(){
+      document.querySelectorAll('#readingContent .verse.speaking').forEach(el=>el.classList.remove('speaking'));
+    }
+
+    function updateBar(){
+      if(!queue.length){ bar.classList.remove('active'); return; }
+      bar.classList.add('active');
+      playBtn.textContent = playing ? '⏸' : '▶';
+      refEl.textContent = (idx>=0 && queue[idx]) ? queue[idx].ref : 'Ready to read';
+    }
+
+    function speakIndex(i){
+      if(!supported) return;
+      if(i<0 || i>=queue.length){ stop(); return; }
+      window.speechSynthesis.cancel();
+      idx = i;
+      clearHighlight();
+      const item = queue[idx];
+      item.el.classList.add('speaking');
+      item.el.scrollIntoView({block:'center', behavior:'smooth'});
+      const utter = new SpeechSynthesisUtterance(item.text);
+      if(voice) utter.voice = voice;
+      utter.rate = rate;
+      utter.onend = ()=>{ if(playing) speakIndex(idx+1); };
+      utter.onerror = (e)=>{ /* ignore cancellation noise */ };
+      window.speechSynthesis.speak(utter);
+      updateBar();
+    }
+
+    function play(){
+      if(!supported){ alert("Sorry, this browser doesn't support text-to-speech."); return; }
+      buildQueue();
+      if(!queue.length) return;
+      playing = true;
+      speakIndex(idx>=0 ? idx : 0);
+      updateBar();
+    }
+
+    function pause(){
+      playing = false;
+      if(supported) window.speechSynthesis.cancel();
+      updateBar();
+    }
+
+    function stop(){
+      playing = false;
+      idx = -1;
+      queue = [];
+      if(supported) window.speechSynthesis.cancel();
+      clearHighlight();
+      bar.classList.remove('active');
+      panel.classList.remove('active');
+    }
+
+    function toggle(){
+      if(playing) pause(); else play();
+    }
+
+    function next(){ if(!queue.length) buildQueue(); playing = true; speakIndex(idx+1); }
+    function prev(){ if(!queue.length) buildQueue(); playing = true; speakIndex(Math.max(0, idx-1)); }
+
+    playBtn.addEventListener('click', toggle);
+    document.getElementById('audioNext').addEventListener('click', next);
+    document.getElementById('audioPrev').addEventListener('click', prev);
+    document.getElementById('audioClose').addEventListener('click', stop);
+    document.getElementById('audioSettingsBtn').addEventListener('click', ()=>{
+      panel.classList.toggle('active');
+    });
+    voiceSelect.addEventListener('change', ()=>{
+      voiceURI = voiceSelect.value;
+      store.set('ttsVoiceURI', voiceURI);
+      const found = voices.find(v=>v.voiceURI===voiceURI);
+      if(found) voice = found;
+      if(playing && idx>=0) speakIndex(idx);
+    });
+    speedInput.addEventListener('input', ()=>{
+      rate = parseFloat(speedInput.value);
+      speedVal.textContent = rate.toFixed(1)+'×';
+      store.set('ttsRate', rate);
+      if(playing && idx>=0) speakIndex(idx);
+    });
+
+    return { toggle, play, pause, stop, next, prev };
+  })();
 
   // ---------- init ----------
   renderToday();
